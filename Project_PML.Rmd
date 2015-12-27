@@ -1,0 +1,93 @@
+---
+title: "Coursera Practical Machine Leaning Project"
+author: "Robert DeSonier"
+date: "December 26, 2015"
+output: html_document
+---
+## Executive Summary
+This report is my submission for the Peer Assessment for the Cousera Class "Practical Machine Learning Project".  The assignment is to analyze the training data set and provide predictions of the manner in which the exercise was completed (the "classe" variable in the training data set).
+
+The predictions are submitted separately on the Coursera site.
+
+## Methods and Background
+The report was prepared using __R markdown__ (R Studio rmd file) and processed by __knitr__ and then transformed into a __HTML__ file.  Besides base R also used the library packages __readr__, __dplyr__, __caret__ and __doParallel__ for this work.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+setwd("~/Coursera/08_Practical Machine Learning/Project")
+library(readr)
+library(dplyr)
+library(caret)
+library(doParallel)
+```
+
+## Data Processing
+Raw data was downloaded from the URLs provided on the assignment webpage. 
+
+```{r, message=FALSE, warning=FALSE}
+# Convert the raw data files into data frames and rename
+
+trainingData1 <- read_csv("pml-training.csv", 
+         col_names = TRUE, col_types = NULL, na = c("", "NA"), comment = "",
+         trim_ws = TRUE, skip = 0, n_max = -1, progress = interactive())
+
+testData1 <- read_csv("pml-testing.csv", 
+         col_names = TRUE, col_types = NULL, na = c("", "NA"), comment = "",
+         trim_ws = TRUE, skip = 0, n_max = -1, progress = interactive())
+```
+
+The training data was examined using basic R tools and the following "housekeeping" completed.  After this cleaning the training data was then separated into two files for model development.
+
+```{r}
+##  Housekeeping
+##  Remove "new window" rows
+trainingData2 <- filter(trainingData1, trainingData1$new_window != "yes")
+
+##  Remove all NA columns
+trainingData3 <- trainingData2[ , !apply( trainingData2, 2, function(x) all(is.na(x)))]
+
+##  Remove timestamp data
+trainingData4 <- select(trainingData3, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2, -cvtd_timestamp,-new_window, -num_window)
+
+##  convert to data frame
+trainingData5 <- as.data.frame(trainingData4)
+
+##  remove index column
+trainingData5[,1] <- NULL
+
+##  need to use factors as output for model
+trainingData5$classe <- as.factor(trainingData5$classe)
+
+##  divide data into training_data and training_test
+set.seed(3456)
+testIndex = createDataPartition(trainingData5$classe, p = 0.40,list=FALSE, times = 1)
+training_data = trainingData5[-testIndex,]
+testing_data = trainingData5[testIndex,]
+```
+
+## Model Development
+Due to the nature of the problem the "random forest" approach using the caret package was selected.  To improve the model three fold cross validation was implemented.  Aside, needed to use parallel processing to reach three fold.
+
+```{r, message=FALSE, warning=FALSE}
+registerDoParallel(cores = 4)
+model <- train(training_data$classe ~., data = training_data, method = "rf",
+                trControl = trainControl(method = "cv",number = 3),
+                prox = TRUE, allowParallel = TRUE)
+```
+
+### Model Summary
+The resulting model is summarized below.
+
+```{r}
+model
+model$finalModel
+```
+
+## Model Performance
+Confusion matrix was calculated using model and the testing data
+```{r}
+modPredTrain <- predict.train(model, testing_data)
+confusionMatrix(modPredTrain, testing_data$classe[2:7689])
+```
+
+
+### Submission
+The same housekeeping steps applied to the training data were applied to the test data and then predicted "classe" submitted for the class.  Resulting total score was 19/20.
